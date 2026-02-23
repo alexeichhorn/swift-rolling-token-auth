@@ -38,13 +38,17 @@ jobs:
         run: xcodebuild build -scheme RollingTokenAuth -destination '${{ matrix.platform.destination }}' -skipPackagePluginValidation
 
   test:
-    name: Unit Tests
+    name: Unit Tests (Swift ${{ matrix.swift }})
     runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        swift: ["6.1", "6.2"]
 
     steps:
       - uses: actions/checkout@v4
       - uses: swift-actions/setup-swift@v2
         with:
-          swift-version: "6.2"
+          swift-version: ${{ matrix.swift }}
       - name: Run tests
         run: swift test -v
