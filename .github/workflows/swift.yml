@@ -11,7 +11,7 @@ on:
 jobs:
   build-apple-platforms:
     name: Build (${{ matrix.platform.name }})
-    runs-on: macos-15
+    runs-on: macos-26
     strategy:
       fail-fast: false
       matrix:
@@ -39,7 +39,7 @@ jobs:
 
   test:
     name: Unit Tests
-    runs-on: macos-15
+    runs-on: macos-26
 
     steps:
       - uses: actions/checkout@v4
