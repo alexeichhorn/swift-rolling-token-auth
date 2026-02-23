@@ -1,0 +1,50 @@
+name: Swift CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-apple-platforms:
+    name: Build (${{ matrix.platform.name }})
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: iOS
+            destination: generic/platform=iOS Simulator
+          - name: macOS
+            destination: platform=macOS
+          - name: Mac Catalyst
+            destination: generic/platform=macOS,variant=Mac Catalyst
+          - name: watchOS
+            destination: generic/platform=watchOS Simulator
+          - name: tvOS
+            destination: generic/platform=tvOS Simulator
+          - name: visionOS
+            destination: generic/platform=visionOS Simulator
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.2"
+      - name: Build ${{ matrix.platform.name }}
+        run: xcodebuild build -scheme RollingTokenAuth -destination '${{ matrix.platform.destination }}' -skipPackagePluginValidation
+
+  test:
+    name: Unit Tests
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.2"
+      - name: Run tests
+        run: swift test -v
