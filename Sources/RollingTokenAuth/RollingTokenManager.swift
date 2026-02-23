@@ -1,34 +1,60 @@
 import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
 import Crypto
 
+/// A generated rolling token together with the timestamp bucket it belongs to.
 public struct RollingToken: Sendable, Equatable {
+    /// Hex-encoded HMAC-SHA256 token value.
     public let token: String
+
+    /// Time bucket (`unixTime / interval`) the token was generated for.
     public let timestamp: Int64
 
+    /// Creates a token value with its corresponding timestamp bucket.
     public init(token: String, timestamp: Int64) {
         self.token = token
         self.timestamp = timestamp
     }
 
+    /// Returns the token offset from a manager's current timestamp bucket.
+    ///
+    /// A value of `0` means current token, `-1` means previous bucket, `1` means next bucket.
     public func offset(in manager: RollingTokenManager) -> Int64 {
         timestamp - manager.currentTimestamp()
     }
 }
 
+/// Generates and validates rolling HMAC-SHA256 tokens with configurable clock tolerance.
+///
+/// Use this type when you need verification logic (typically server-side).
+/// Validation uses an internal cache of active time buckets and is therefore mutating.
 public struct RollingTokenManager: Sendable {
     private let secret: Data
+
+    /// Size of each time bucket in seconds.
     public let interval: Int64
+
+    /// Number of buckets accepted before and after the current bucket during validation.
     public let tolerance: Int64
+
     private var activeTokens: [RollingToken]
     private let nowProvider: @Sendable () -> TimeInterval
 
+    /// Creates a manager from a UTF-8 secret string.
+    ///
+    /// - Parameters:
+    ///   - secret: Shared secret used to compute HMAC-SHA256.
+    ///   - interval: Bucket size in seconds. Must be greater than zero.
+    ///   - tolerance: Accepted bucket window around "now". Must be zero or greater.
     public init(secret: String, interval: Int64, tolerance: Int64 = 1) {
         self.init(secret: Data(secret.utf8), interval: interval, tolerance: tolerance)
     }
 
+    /// Creates a manager from raw secret bytes.
+    ///
+    /// - Parameters:
+    ///   - secret: Shared secret bytes used to compute HMAC-SHA256.
+    ///   - interval: Bucket size in seconds. Must be greater than zero.
+    ///   - tolerance: Accepted bucket window around "now". Must be zero or greater.
     public init(secret: Data, interval: Int64, tolerance: Int64 = 1) {
         self.init(secret: secret, interval: interval, tolerance: tolerance, nowProvider: {
             Date().timeIntervalSince1970
@@ -51,15 +77,22 @@ public struct RollingTokenManager: Sendable {
         self.nowProvider = nowProvider
     }
 
+    /// Returns the current timestamp bucket (`unixTime / interval`).
     public func currentTimestamp() -> Int64 {
         Int64(nowProvider()) / interval
     }
 
+    /// Generates a token for the current bucket or a relative bucket offset.
+    ///
+    /// - Parameter offset: Relative bucket offset (`0` current, `-1` previous, `1` next).
     public func generateToken(offset: Int64 = 0) -> RollingToken {
         let timestamp = currentTimestamp() + offset
         return token(forTimestamp: timestamp)
     }
 
+    /// Validates a token against the current tolerance window.
+    ///
+    /// This method is mutating because it refreshes the internal token cache.
     public mutating func isValid(_ token: String) -> Bool {
         refreshTokens()
         return activeTokens.contains { $0.token == token }
@@ -69,7 +102,7 @@ public struct RollingTokenManager: Sendable {
         let payload = Data(String(timestamp).utf8)
         let key = SymmetricKey(data: secret)
         let digest = HMAC<SHA256>.authenticationCode(for: payload, using: key)
-        let token = digest.hexEncodedString
+        let token = digest.rollingTokenAuthHexEncodedString
         return RollingToken(token: token, timestamp: timestamp)
     }
 
@@ -93,67 +126,8 @@ public struct RollingTokenManager: Sendable {
     }
 }
 
-public struct RollingAuthorizationToken: Sendable {
-    private let secret: Data
-    public let interval: Int64
-    private let nowProvider: @Sendable () -> TimeInterval
-
-    public init(secret: String, interval: Int64) {
-        self.init(secret: Data(secret.utf8), interval: interval)
-    }
-
-    public init(secret: Data, interval: Int64) {
-        self.init(secret: secret, interval: interval, nowProvider: {
-            Date().timeIntervalSince1970
-        })
-    }
-
-    init(secret: Data, interval: Int64, nowProvider: @escaping @Sendable () -> TimeInterval) {
-        precondition(interval > 0, "interval must be greater than zero")
-        self.secret = secret
-        self.interval = interval
-        self.nowProvider = nowProvider
-    }
-
-    public func generate(forTimestamp timestamp: Int64) -> String {
-        let payload = Data(String(timestamp).utf8)
-        let key = SymmetricKey(data: secret)
-        let digest = HMAC<SHA256>.authenticationCode(for: payload, using: key)
-        return digest.hexEncodedString
-    }
-
-    public func generate() -> String {
-        let timestamp = Int64(nowProvider()) / interval
-        return generate(forTimestamp: timestamp)
-    }
-}
-
-public extension URLRequest {
-    mutating func addBearerToken(_ token: String) {
-        setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-    }
-
-    mutating func addAuthentication(with token: RollingAuthorizationToken) {
-        addBearerToken(token.generate())
-    }
-
-    mutating func addAuthentication(with manager: RollingTokenManager, offset: Int64 = 0) {
-        addBearerToken(manager.generateToken(offset: offset).token)
-    }
-
-    init(url: URL, authentication token: RollingAuthorizationToken) {
-        self.init(url: url)
-        addAuthentication(with: token)
-    }
-
-    init(url: URL, authentication token: RollingAuthorizationToken, timeoutInterval: TimeInterval) {
-        self.init(url: url, timeoutInterval: timeoutInterval)
-        addAuthentication(with: token)
-    }
-}
-
-private extension Sequence where Element == UInt8 {
-    var hexEncodedString: String {
+extension Sequence where Element == UInt8 {
+    var rollingTokenAuthHexEncodedString: String {
         map { String(format: "%02x", $0) }.joined()
     }
 }
