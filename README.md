@@ -1,12 +1,32 @@
 # RollingTokenAuth
 
-Rolling token authentication for Swift clients and servers.
+A simple rolling token authentication package for Swift clients and servers.
+It generates time-based HMAC-SHA256 tokens and can validate them with clock tolerance.
 
 ## Features
 
 - HMAC-SHA256 rolling token generation
 - Tolerance window validation (`past/current/future` intervals)
 - `URLRequest` helpers for bearer auth headers
+
+## What Is Rolling Token Auth?
+
+Rolling token auth is a shared-secret authentication scheme where tokens change automatically over time.
+
+Instead of issuing a long-lived static token, both sides independently generate the same short-lived token from:
+
+- A shared `secret`
+- The same `interval` (for example, 3600 seconds)
+- The current time bucket (`unixTimestamp / interval`)
+
+Because both sides can compute the same token for "now", no token storage is required.
+
+## How It Works
+
+1. Convert current time to a time bucket (`timestamp = now / interval`).
+2. Compute `HMAC_SHA256(secret, String(timestamp))`.
+3. Hex-encode the digest and send it as bearer token.
+4. On verification, accept tokens from current bucket and optionally nearby buckets (`tolerance`) to handle small clock drift.
 
 ## Installation
 
@@ -18,18 +38,11 @@ dependencies: [
 
 ## Usage
 
-## Two Variants
-
-This package provides two public token types for different use-cases:
-
-- `RollingTokenManager`
-  - Full generator + validator.
-  - Use this when you need `tolerance`-based token validation (typically server-side).
-- `RollingAuthorizationToken`
-  - Lightweight generator-only helper.
-  - Use this when you only need to attach outbound bearer tokens (typically client-side).
+This package provides two public token types for different use-cases.
 
 ### `RollingTokenManager` (generation + validation)
+
+Use this when you need `tolerance`-based validation (typically server-side).
 
 ```swift
 import RollingTokenAuth
@@ -40,9 +53,21 @@ let token = manager.generateToken()
 let isValid = manager.isValid(token.token)
 ```
 
-With `tolerance: 1`, previous, current, and next interval tokens are accepted.
+Parameters:
+
+- `secret`: Shared key used for HMAC.
+- `interval`: Token window in seconds. Smaller interval = shorter token lifetime.
+- `tolerance`: Number of previous/next windows to accept during validation.
+
+With `tolerance: 1`, these are valid:
+
+- Previous interval token
+- Current interval token
+- Next interval token
 
 ### `RollingAuthorizationToken` (generation only)
+
+Use this when you only need to generate outbound auth headers (typically client-side).
 
 ```swift
 import Foundation
@@ -63,3 +88,15 @@ let manager = RollingTokenManager(secret: "my_secret", interval: 3600, tolerance
 var request = URLRequest(url: URL(string: "https://example.com")!)
 request.addAuthentication(with: manager)
 ```
+
+## When To Use This
+
+Good fit:
+
+- Service-to-service requests where both sides share a secret
+- Lightweight auth where JWT/session infrastructure is unnecessary
+- Cross-platform client/server codebases with matching rolling-token behavior
+
+Less ideal:
+
+- User identity/authorization systems that need claims, revocation, or rich session state
