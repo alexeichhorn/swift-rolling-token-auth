@@ -7,7 +7,7 @@ It generates time-based HMAC-SHA256 tokens and can validate them with clock tole
 
 - HMAC-SHA256 rolling token generation
 - Tolerance window validation (`past/current/future` intervals)
-- `URLRequest` helpers for bearer auth headers (Apple platforms only)
+- `URLRequest` helpers for bearer auth headers (Apple platforms only, not available on Linux)
 
 ## What Is Rolling Token Auth?
 
@@ -70,17 +70,6 @@ With `tolerance: 1`, these are valid:
 Use this when you only need to generate outbound auth headers (typically client-side).
 
 ```swift
-import RollingTokenAuth
-
-let auth = RollingAuthorizationToken(secret: "my_secret", interval: 3600)
-let token = auth.generate()
-```
-
-### `URLRequest` helpers (Apple platforms only)
-
-On Apple platforms, both token types can sign a `URLRequest` directly:
-
-```swift
 import Foundation
 import RollingTokenAuth
 
@@ -89,17 +78,15 @@ var request = URLRequest(url: URL(string: "https://example.com")!)
 request.addAuthentication(with: auth)
 ```
 
+You can also use `RollingTokenManager` directly for request auth:
+
 ```swift
+import Foundation
+import RollingTokenAuth
+
 let manager = RollingTokenManager(secret: "my_secret", interval: 3600, tolerance: 1)
 var request = URLRequest(url: URL(string: "https://example.com")!)
 request.addAuthentication(with: manager)
-```
-
-These helpers are not available on Linux, where `URLRequest` lives in `FoundationNetworking` and would make every
-binary that links this package depend on libcurl. There, set the header on your HTTP client's request type yourself:
-
-```swift
-let authorization = "Bearer \(auth.generate())"
 ```
 
 ## When To Use This
