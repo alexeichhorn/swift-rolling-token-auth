@@ -1,7 +1,4 @@
 import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
 import Crypto
 
 /// Lightweight rolling token generator for request authorization headers.
@@ -58,6 +55,9 @@ public struct RollingAuthorizationToken: Sendable {
     }
 }
 
+// Apple platforms only. Elsewhere `URLRequest` lives in `FoundationNetworking`, which would make
+// every binary linking this package load libcurl at launch, even one that only validates tokens.
+#if !canImport(FoundationNetworking)
 public extension URLRequest {
     /// Sets the `Authorization` header to `Bearer <token>`.
     mutating func addBearerToken(_ token: String) {
@@ -88,3 +88,4 @@ public extension URLRequest {
         addAuthentication(with: token)
     }
 }
+#endif
