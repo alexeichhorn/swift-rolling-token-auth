@@ -1,7 +1,4 @@
 import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
 import Testing
 @testable import RollingTokenAuth
 
@@ -88,6 +85,8 @@ func authorizationTokenMatchesManager() {
     #expect(authToken.generate(forTimestamp: 42) == manager.generateToken(offset: 35).token)
 }
 
+// The `URLRequest` helpers exist on Apple platforms only.
+#if !canImport(FoundationNetworking)
 @Test("URLRequest authorization helper adds bearer header")
 func urlRequestHelperAddsAuthorizationHeader() throws {
     let fixedNow = TimeInterval(30 * 5)
@@ -103,3 +102,4 @@ func urlRequestHelperAddsAuthorizationHeader() throws {
     let expectedHeader = "Bearer \(auth.generate())"
     #expect(request.value(forHTTPHeaderField: "Authorization") == expectedHeader)
 }
+#endif
